@@ -1,0 +1,1619 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shopline程式碼產生器</title>
+    <style>
+        :root { 
+            --primary: #2a2b26;       /* 主文字、替代黑色 */
+            --header-bg: #ffe59a;     /* 主色調黃色 */
+            --input-border: #b2b3af;  /* 未填寫外框線 (淺灰) */
+            --input-filled: #ffe59a;  /* 填寫完成外框線 (黃色) */
+            --bg: #ffffff;            /* 網頁背景色 (純白) */
+            --white-alt: #ffffff;     /* 卡片純白底色 */
+        }
+        
+        body { 
+            font-family: "Noto Sans JP Rounded", "jf-openhuninn-2.0", "jf-openhuninn", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; 
+            background: #fdf9f8; 
+            margin: 0; 
+            padding: 20px; 
+            color: var(--primary); 
+            overflow: hidden; 
+        }
+        
+        .header { background: var(--header-bg); color: var(--primary); padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+        .header h1 { margin: 0; font-size: 24px; font-weight: bold; }
+        .header p { margin: 5px 0 0 0; color: var(--primary); font-size: 14px; font-weight: 500; opacity: 0.8; }
+        
+        .container { display: flex; gap: 20px; max-width: 1400px; margin: 0 auto; height: calc(100vh - 120px); }
+        .left-panel { flex: 1; background: var(--white-alt); padding: 20px; padding-bottom: 80px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); overflow-y: auto; min-height: 0; }
+        .right-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+        
+        details.section-details { 
+            margin-bottom: 15px; 
+            border: 1px solid #eee; 
+            border-radius: 6px; 
+            background: var(--white-alt); 
+            overflow: hidden; 
+            transition: border-color 0.2s, box-shadow 0.2s, opacity 0.2s;
+        }
+        /* 拖曳中的視覺效果：僅在拖曳當下呈現半透明與虛線 */
+        details.section-details.dragging { 
+            opacity: 0.45; 
+            border: 2px dashed var(--primary); 
+            box-shadow: 0 8px 16px rgba(42, 43, 38, 0.15); 
+        }
+        details.section-details.drag-over-top { border-top: 3px solid var(--primary); }
+        details.section-details.drag-over-bottom { border-bottom: 3px solid var(--primary); }
+        
+        summary.section-summary { 
+            background: var(--header-bg); 
+            color: var(--primary); 
+            padding: 10px 15px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            list-style: none; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            user-select: none; 
+            transition: background-color 0.3s;
+        }
+        summary.section-summary::after { content: "▼"; font-size: 12px; transition: transform 0.2s; color: var(--primary); }
+        details.section-details[open] summary.section-summary::after { transform: rotate(180deg); }
+        summary.section-summary::-webkit-details-marker { display: none; }
+        
+        .drag-handle { 
+            margin-right: 12px; cursor: grab; padding: 4px 8px; font-size: 18px; line-height: 1; 
+            color: var(--primary); border-radius: 4px; background: rgba(42, 43, 38, 0.08); transition: background 0.15s;
+        }
+        .drag-handle:hover { background: rgba(42, 43, 38, 0.18); }
+        .drag-handle:active { cursor: grabbing; }
+        
+        .section-body { padding: 15px; background: var(--white-alt); }
+        
+        label { display: block; font-weight: bold; margin-bottom: 5px; color: #666666; font-size: 14px; }
+        .hint { display: block; font-size: 12px; color: #b2b3af; margin-bottom: 5px; line-height: 1.4; }
+        
+        .form-group { margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px dashed #eee; }
+        .form-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        
+        input[type="text"], textarea.spec-input { 
+            width: 100%; 
+            padding: 8px 12px; 
+            border: 1px solid var(--input-border); 
+            border-radius: 4px; 
+            font-size: 14px; 
+            box-sizing: border-box; 
+            background: #ffffff; 
+            transition: all 0.2s; 
+            font-family: inherit; 
+            color: var(--primary);
+        }
+        input[type="text"].filled, textarea.spec-input.filled { 
+            border-color: var(--input-filled); 
+            background-color: #ffffff; 
+        }
+        textarea.spec-input { height: 160px; resize: vertical; line-height: 1.4; }
+        input[type="text"]:focus, textarea.spec-input:focus { 
+            outline: none; 
+            border-color: var(--input-filled); 
+            box-shadow: 0 0 0 3px rgba(255, 229, 154, 0.4); 
+        }
+        
+        .color-row { display: flex; gap: 15px; align-items: center; margin-top: 8px; }
+        .color-item { display: flex; align-items: center; gap: 5px; font-size: 13px; color: #666666; font-weight: bold; }
+        input[type="color"] { width: 28px; height: 28px; padding: 0; border: 2px solid #fff; border-radius: 50%; cursor: pointer; box-shadow: 0 0 0 1px #ccc; overflow: hidden; background: none; }
+        input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+        input[type="color"]::-webkit-color-swatch { border: none; border-radius: 50%; }
+        input[type="color"]::-moz-color-swatch { border: none; border-radius: 50%; }
+
+        .clear-btn { background: white; color: var(--primary); border: 1px solid var(--primary); padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; transition: all 0.2s; display: flex; align-items: center; gap: 4px; }
+        .clear-btn:hover { background: #eee; }
+        
+        .summary-actions { display: flex; gap: 6px; align-items: center; margin-left: auto; margin-right: 12px; }
+        .summary-actions button { 
+            background: #ffffff; 
+            border: 1px solid #e5e7eb; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-size: 13px; 
+            padding: 3px 6px; 
+            transition: all 0.2s; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            color: #4b5563; 
+        }
+        .summary-actions button:hover { background: #f3f4f6; }
+        .summary-actions .delete-btn { color: #dc2626; }
+        .summary-actions .delete-btn:hover { background: #fee2e2; border-color: #f87171; }
+                
+        .tabs { display: flex; gap: 10px; margin-bottom: 0px; }
+        .tab-btn { flex: 1; padding: 12px; background: #e5e5e5; border: 1px solid transparent; border-bottom: none; border-radius: 8px 8px 0 0; cursor: pointer; font-weight: bold; font-size: 16px; color: #777; transition: all 0.2s; outline: none; }
+        .tab-btn:hover { background: #d4d4d4; }
+        .tab-btn.active { background: var(--white-alt); color: var(--primary); border-color: #eee; border-bottom-color: var(--white-alt); z-index: 2; position: relative; padding-bottom: 13px; margin-bottom: -1px; }
+        
+        .tab-content { display: none; flex-direction: column; flex: 1; background: var(--white-alt); border: 1px solid #eee; border-radius: 0 0 8px 8px; overflow: hidden; position: relative; z-index: 1; }
+        .tab-content.active { display: flex; }
+        
+        .code-area-wrapper { padding: 20px; display: flex; flex-direction: column; flex: 1; height: 100%; box-sizing: border-box; overflow-y: auto; }
+        .copy-btn { background: var(--primary); color: var(--header-bg); border: none; padding: 12px 20px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; flex-shrink: 0; margin-bottom: 15px; transition: opacity 0.2s; }
+        .copy-btn:hover { opacity: 0.9; }
+        textarea#outputCode { width: 100%; flex: 1; padding: 12px; border: 1px solid var(--input-border); border-radius: 4px; font-family: Consolas, monospace; font-size: 12px; resize: none; box-sizing: border-box; background: #F9FAFB; color: var(--primary); white-space: pre-wrap; word-wrap: break-word; min-height: 400px; }
+        
+        .preview-wrapper { width: 100%; height: 100%; overflow-y: auto; background: #e5e5e5; display: flex; justify-content: center; padding: 20px 0; box-sizing: border-box; }
+        .preview-container { background: white; width: 100%; max-width: 750px; min-height: 100%; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        
+        #toast { visibility: hidden; min-width: 250px; background: var(--primary); color: #fff; text-align: center; border-radius: 4px; padding: 16px; position: fixed; z-index: 10; left: 50%; bottom: 30px; transform: translateX(-50%); font-size: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        #toast.show { visibility: visible; animation: fadein 0.5s, fadeout 0.5s 2.5s; }
+        @keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
+        @keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
+
+        /* 推薦商品卡片模組（支援手機橫向滑動 + 電腦版平均置中） */
+        .custom-cards-section {
+            width: 100% !important;
+            max-width: 750px !important;
+            margin: 0 auto !important;
+            padding: 30px 15px 35px !important;
+            box-sizing: border-box !important;
+            text-align: center !important;
+            line-height: 1.5 !important;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+            border-radius: 0 !important;
+            background-color: #ffffff !important;
+        }
+        .custom-cards-title {
+            font-size: 18px !important;
+            font-weight: bold !important;
+            margin: 0 0 20px 0 !important;
+            letter-spacing: 1px !important;
+            display: inline-block !important;
+            line-height: 1.4 !important;
+        }
+        .custom-cards-grid {
+            display: flex !important;
+            justify-content: center !important;
+            align-items: stretch !important;
+            width: 100% !important;
+            margin: 0 auto !important;
+            padding: 0 !important;
+            box-sizing: border-box !important;
+            flex-wrap: nowrap !important;
+        }
+        .custom-card-item {
+            flex: 1 1 0 !important;
+            max-width: 220px !important;
+            min-width: 0 !important;
+            margin: 0 6px !important;
+            text-decoration: none !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            box-sizing: border-box !important;
+            transition: transform 0.25s ease, box-shadow 0.25s ease !important;
+            background-color: #ffffff !important;
+            border-radius: 12px !important;
+            padding: 10px !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06) !important;
+        }
+        .custom-card-item:hover {
+            transform: translateY(-4px) !important;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12) !important;
+        }
+        .custom-card-img-wrap {
+            width: 100% !important;
+            border-radius: 8px !important;
+            overflow: hidden !important;
+            margin-bottom: 8px !important;
+            background-color: #f9f9f9 !important;
+            line-height: 0 !important;
+        }
+        .custom-card-img-wrap img {
+            width: 100% !important;
+            height: auto !important;
+            aspect-ratio: 1 / 1 !important;
+            object-fit: cover !important;
+            display: block !important;
+            border: none !important;
+        }
+        .custom-card-name-pill {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            font-size: 13px !important;
+            font-weight: bold !important;
+            padding: 6px 10px !important;
+            border-radius: 9999px !important;
+            line-height: 1.3 !important;
+            width: 100% !important;
+            min-height: 38px !important;
+            box-sizing: border-box !important;
+            text-align: center !important;
+            word-break: break-word !important;
+        }
+        @media (max-width: 600px) {
+            .custom-cards-section {
+                padding: 22px 0 25px !important;
+            }
+            .custom-cards-grid {
+                justify-content: flex-start !important;
+                flex-wrap: nowrap !important;
+                overflow-x: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+                scroll-snap-type: x mandatory !important;
+                padding: 6px 12px 14px 12px !important;
+                scrollbar-width: none !important;
+                -ms-overflow-style: none !important;
+            }
+            .custom-cards-grid::-webkit-scrollbar {
+                display: none !important;
+            }
+            .custom-card-item {
+                flex: 0 0 130px !important;
+                max-width: 130px !important;
+                min-width: 130px !important;
+                margin: 0 5px !important;
+                padding: 8px !important;
+                border-radius: 10px !important;
+                scroll-snap-align: start !important;
+            }
+            .custom-card-img-wrap {
+                margin-bottom: 7px !important;
+                border-radius: 8px !important;
+            }
+            .custom-card-name-pill {
+                font-size: 12px !important;
+                padding: 5px 6px !important;
+                min-height: 34px !important;
+                line-height: 1.3 !important;
+                border-radius: 9999px !important;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1> Shopline 程式碼產生器</h1>
+        <p>產生流程：左側填寫商品資料 > 右側確認排版 > 一鍵複製html > 貼上shopline > 大功告成</p>
+    </div>
+
+    <div class="container">
+        <div class="left-panel" id="form-container">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 style="margin: 0; border: none; padding: 0; color: var(--primary);">📝 填寫商品資訊</h2>
+                <button type="button" id="clearAllBtn" class="clear-btn">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg> 
+                    一鍵清除
+                </button>
+            </div>
+
+            <form id="dataForm">
+                
+                <!-- 01. 基本資訊 -->
+                <details class="section-details" draggable="true" data-module="basic" open>
+                    <summary class="section-summary">
+                        <div style="display:flex; align-items:center;"><span class="drag-handle" title="按住此處上下拖曳調整順序">⣿</span> 01. 基本資訊與促銷優惠</div>
+                        <div class="summary-actions">
+                            <button type="button" class="move-up-btn" title="上移此區塊">🔼</button>
+                            <button type="button" class="move-down-btn" title="下移此區塊">🔽</button>
+                            <button type="button" class="duplicate-btn" title="新增此區塊">➕</button>
+                            <button type="button" class="delete-btn" title="刪除此區塊">🗑️</button>
+                        </div>
+                    </summary>
+                    <div class="section-body">
+                        <div class="form-group">
+                            <label>商品名稱</label>
+                            <input type="text" name="title" value="【BatterDay焙日】超夠味滷包（2入）">
+                        </div>
+                        <div class="form-group">
+                            <label>促銷文字</label>
+                            <input type="text" name="promo" value="🎉10月會員限定：任選5款焙日滷包，就送「焙日茶碗蒸粉(15g*5包入)」！贈品送完為止🎉">
+                            <div class="color-row">
+                                <div class="color-item"><input type="color" name="col_promo" value="#ff0000"> 文字顏色</div>
+                            </div>
+                        </div>
+                        
+                        <div style="padding: 15px; background: #f9fafa; border-radius: 6px; border: 1px solid #eee; margin-bottom: 15px;">
+                            <label style="color:#55b733; font-size:15px;">✦ LINE 優惠區塊</label>
+                            <span class="hint" style="margin-bottom:10px;">連結已固定</span>
+                            
+                            <label>綠色小標</label>
+                            <input type="text" name="line_top" value="\ 新好友限定 /" style="margin-bottom:10px;">
+                            
+                            <div style="display:flex; gap:10px; margin-bottom:10px;">
+                                <div style="flex:2;">
+                                    <label>優惠文字</label>
+                                    <input type="text" name="line_main1" value="焙日烘焙粉全品項">
+                                </div>
+                                <div style="flex:1;">
+                                    <label>折扣數(黃底)</label>
+                                    <input type="text" name="line_price" value="$30">
+                                </div>
+                                <div style="flex:1.5;">
+                                    <label>優惠文字</label>
+                                    <input type="text" name="line_main2" value="折扣碼🔥">
+                                </div>
+                            </div>
+                            
+                            <label>優惠說明（第一行「烘焙粉」系列可依品項調整為料理包或其他）</label>
+                            <textarea name="line_desc" class="spec-input" style="height: 60px;">‧適用所有烘焙粉系列之規格與口味
+‧折扣無法與其他優惠重複使用</textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label>跳轉至下方食譜區的按鈕文字</label>
+                            <input type="text" name="recipe_btn_text" value="👇 點我看超夠味滷包食譜 👇">
+                            <div class="color-row">
+                                <div class="color-item"><input type="color" name="col_btn_txt" value="#2a2b26"> 文字顏色</div>
+                                <div class="color-item"><input type="color" name="col_btn_border" value="#2a2b26"> 外框顏色</div>
+                                <div class="color-item"><input type="color" name="col_btn_bg" value="#ffe59a"> 背景顏色</div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>食譜跳轉按鈕目標網址</label>
+                            <span class="hint">前台點擊會自動滑動到「04. 食譜介紹」</span>
+                            <input type="text" name="recipe_url" value="https://www.heybaker.com/products/batterday-tea-egg-spice-pouch">
+                        </div>
+                    </div>
+                </details>
+
+                <!-- 02. 介紹文案 -->
+                <details class="section-details" draggable="true" data-module="features">
+                    <summary class="section-summary">
+                        <div style="display:flex; align-items:center;"><span class="drag-handle" title="按住此處上下拖曳調整順序">⣿</span> 02. 介紹文案 (補充文字可複製此段)</div>
+                        <div class="summary-actions">
+                            <button type="button" class="move-up-btn" title="上移此區塊">🔼</button>
+                            <button type="button" class="move-down-btn" title="下移此區塊">🔽</button>
+                            <button type="button" class="duplicate-btn" title="新增此區塊">➕</button>
+                            <button type="button" class="delete-btn" title="刪除此區塊">🗑️</button>
+                        </div>
+                    </summary>
+                    <div class="section-body">
+                        <div class="hint">
+                            可按下方「新增文字」增加小標與內文段落
+                        </div>
+                        <div class="color-row" style="margin-bottom: 15px; flex-wrap: wrap;">
+                            <div class="color-item"><input type="color" name="col_feat_bg" value="#ffffff"> 區塊底色</div>
+                            <div class="color-item"><input type="color" name="col_feat_title_bg" value="#ffe59a"> 小標背景色</div>
+                            <div class="color-item"><input type="color" name="col_feat_title_txt" value="#2a2b26"> 小標文字色</div>
+                            <div class="color-item"><input type="color" name="col_feat_content_txt" value="#666666"> 內文字色</div>
+                        </div>
+                        
+                        <div class="feature-list" style="display:flex; flex-direction:column; gap:15px;">
+                            <div class="feature-item" style="padding: 10px; background: #fff; border: 1px dashed #ccc; border-radius: 6px; position:relative;">
+                                <div style="margin-bottom:8px;">
+                                    <label style="font-size:12px;">小標</label>
+                                    <input type="text" class="feat-title" value="\ 超夠味滷包濃郁登場 /">
+                                </div>
+                                <div>
+                                    <label style="font-size:12px;">內文</label>
+                                    <textarea class="feat-content spec-input" style="height: 80px;">滷汁清爽不死鹹
+輕鬆滷出透骨入味的靈魂美味！
+（特別選用高規格耐煮過濾袋，久煮也不怕破包）</textarea>
+                                </div>
+                                <button type="button" class="remove-item-btn" style="position:absolute; top:10px; right:10px; background:none; border:none; cursor:pointer; color:#dc2626;" title="移除此段落">✖</button>
+                            </div>
+                            
+                            <div class="feature-item" style="padding: 10px; background: #fff; border: 1px dashed #ccc; border-radius: 6px; position:relative;">
+                                <div style="margin-bottom:8px;">
+                                    <label style="font-size:12px;">小標</label>
+                                    <input type="text" class="feat-title" value="台灣在地製作，成分單純又安心">
+                                </div>
+                                <div>
+                                    <label style="font-size:12px;">內文</label>
+                                    <textarea class="feat-content spec-input" style="height: 60px;">焙日嚴選 100% 純植物頂級香辛料
+無添加人工香料與防腐劑</textarea>
+                                </div>
+                                <button type="button" class="remove-item-btn" style="position:absolute; top:10px; right:10px; background:none; border:none; cursor:pointer; color:#dc2626;" title="移除此段落">✖</button>
+                            </div>
+                        </div>
+                        
+                        <button type="button" class="add-feature-btn" style="width:100%; margin-top:15px; padding:8px; background:#f9fafa; border:1px dashed #b2b3af; border-radius:6px; cursor:pointer; font-weight:bold; color:#666;">➕ 新增文字</button>
+                    </div>
+                </details>
+
+                <!-- 03. 圖片區塊 -->
+                <details class="section-details" draggable="true" data-module="images">
+                    <summary class="section-summary">
+                        <div style="display:flex; align-items:center;"><span class="drag-handle" title="按住此處上下拖曳調整順序">⣿</span> 03. 圖片 (補充圖片可複製此段)</div>
+                        <div class="summary-actions">
+                            <button type="button" class="move-up-btn" title="上移此區塊">🔼</button>
+                            <button type="button" class="move-down-btn" title="下移此區塊">🔽</button>
+                            <button type="button" class="duplicate-btn" title="新增此區塊">➕</button>
+                            <button type="button" class="delete-btn" title="刪除此區塊">🗑️</button>
+                        </div>
+                    </summary>
+                    <div class="section-body">
+                        <div class="hint">可按下方「新增圖片」增加圖片，並自定義每張圖片的 alt 替代文字</div>
+                        
+                        <div class="image-list" style="display:flex; flex-direction:column; gap:15px;">
+                            <div class="image-item" style="padding: 10px; background: #fff; border: 1px dashed #ccc; border-radius: 6px; position:relative; display:flex; gap:10px; align-items:flex-end;">
+                                <div style="flex:2;">
+                                    <label style="font-size:12px;">圖片網址（複製上傳到shopline圖片庫的網址）</label>
+                                    <input type="text" class="img-url" value="https://img.shoplineapp.com/media/image_clips/6a99180c44b7a3019aa5bb84/original.jpg?1788418059=&owner_id=5acace3800fdde0bc100cbfb">
+                                </div>
+                                <div style="flex:1;">
+                                    <label style="font-size:12px;">替代文字 (Alt)</label>
+                                    <input type="text" class="img-alt" value="五星好評圖">
+                                </div>
+                                <button type="button" class="remove-item-btn" style="background:none; border:none; cursor:pointer; color:#dc2626; padding-bottom:10px;" title="移除此圖片">✖</button>
+                            </div>
+                        </div>
+                        
+                        <button type="button" class="add-image-btn" style="width:100%; margin-top:15px; padding:8px; background:#f9fafa; border:1px dashed #b2b3af; border-radius:6px; cursor:pointer; font-weight:bold; color:#666;">➕ 新增圖片</button>
+                    </div>
+                </details>
+
+                <!-- 04. 食譜介紹 -->
+                <details class="section-details" draggable="true" data-module="recipe_banner">
+                    <summary class="section-summary">
+                        <div style="display:flex; align-items:center;"><span class="drag-handle" title="按住此處上下拖曳調整順序">⣿</span> 04. 食譜介紹</div>
+                        <div class="summary-actions">
+                            <button type="button" class="move-up-btn" title="上移此區塊">🔼</button>
+                            <button type="button" class="move-down-btn" title="下移此區塊">🔽</button>
+                            <button type="button" class="duplicate-btn" title="新增此區塊">➕</button>
+                            <button type="button" class="delete-btn" title="刪除此區塊">🗑️</button>
+                        </div>
+                    </summary>
+                    <div class="section-body">
+                        <div class="hint">01區塊的「跳轉至下方食譜區的按鈕」會自動滑動跳轉至此區塊。</div>
+                        <div class="form-group" style="display:flex; gap:10px;">
+                            <div style="flex:2;">
+                                <label>圖片網址（複製上傳到shopline圖片庫的網址）</label>
+                                <input type="text" name="img_recipe_banner" value="https://img.shoplineapp.com/media/image_clips/6ad9c2c4939895b7c0c50c99/original.jpg?1792656067=&owner_id=5acace3800fdde0bc100cbfb">
+                            </div>
+                            <div style="flex:1;">
+                                <label>替代文字 (Alt)</label>
+                                <input type="text" name="alt_recipe_banner" value="食譜轉折圖">
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- 05. 收合選單 Bar 固定 -->
+                <details class="section-details" draggable="true" data-module="bar_fixed">
+                    <summary class="section-summary">
+                        <div style="display:flex; align-items:center;"><span class="drag-handle" title="按住此處上下拖曳調整順序">⣿</span> 05. 收合選單 Bar (常駐展開)</div>
+                        <div class="summary-actions">
+                            <button type="button" class="move-up-btn" title="上移此區塊">🔼</button>
+                            <button type="button" class="move-down-btn" title="下移此區塊">🔽</button>
+                            <button type="button" class="duplicate-btn" title="新增此區塊">➕</button>
+                            <button type="button" class="delete-btn" title="刪除此區塊">🗑️</button>
+                        </div>
+                    </summary>
+                    <div class="section-body">
+                        <div class="hint">此區域不收合</div>
+                        <div class="form-group" style="display:flex; gap:10px;">
+                            <div style="flex:2;">
+                                <label>展開後的按鈕圖片網址</label>
+                                <input type="text" name="bar_title" value="https://img.shoplineapp.com/media/image_clips/6ad9c2c4fb653fb5081d4c98/original.jpg?1792656067=&owner_id=5acace3800fdde0bc100cbfb">
+                            </div>
+                            <div style="flex:1;">
+                                <label>替代文字 (Alt)</label>
+                                <input type="text" name="bar_title_alt" value="Bar標題">
+                            </div>
+                        </div>
+                        <div class="form-group" style="display:flex; gap:10px;">
+                            <div style="flex:2;">
+                                <label>影片（貼上YouTube 或 IG Reels的影片連結）</label>
+                                <input type="text" name="vid" value="https://www.youtube.com/embed/0qnpV6DQ1OI?si=w_uFTIxLhajzq79S">
+                            </div>
+                            <div style="flex:1;">
+                                <label>替代文字 (Alt / 說明)</label>
+                                <input type="text" name="vid_alt" value="示範影片">
+                            </div>
+                        </div>
+                        <div class="form-group" style="display:flex; gap:10px;">
+                            <div style="flex:2;">
+                                <label>食譜圖片網址</label>
+                                <input type="text" name="img" value="https://img.shoplineapp.com/media/image_clips/6a1d1809f494f2e4ef913754/original.jpg?1780291592=&owner_id=5acace3800fdde0bc100cbfb">
+                            </div>
+                            <div style="flex:1;">
+                                <label>替代文字 (Alt)</label>
+                                <input type="text" name="img_alt" value="內容圖">
+                            </div>
+                        </div>
+
+                        <!-- 內崁：推薦相關品卡片模組 -->
+                        <div style="margin-top: 15px; padding: 12px; background: #fffdf8; border: 1px dashed #ffe59a; border-radius: 6px;">
+                            <label style="color:#2a2b26; font-size:14px; margin-bottom: 6px;">
+                                ✦ 推薦相關品卡片模組 (選填，顯示於本 Bar 底部)
+                            </label>
+                            <div class="hint">推薦商品卡片區塊，電腦版自動平均置中，手機版支援橫向平滑滑動不換行</div>
+                            <div class="form-group" style="padding-bottom:10px; margin-bottom:10px;">
+                                <label>區塊自訂色彩</label>
+                                <div class="color-row" style="flex-wrap: wrap; gap: 10px;">
+                                    <div class="color-item"><input type="color" name="col_cards_bg" value="#ffffff"> 區域底色</div>
+                                    <div class="color-item"><input type="color" name="col_cards_title_txt" value="#605900"> 小標文字色</div>
+                                    <div class="color-item"><input type="color" name="col_cards_pill_bg" value="#acac00"> 商品名字底色</div>
+                                    <div class="color-item"><input type="color" name="col_cards_pill_txt" value="#ffffff"> 商品名字色</div>
+                                </div>
+                            </div>
+                            <div class="form-group" style="padding-bottom:10px; margin-bottom:10px;">
+                                <label>小標文字</label>
+                                <input type="text" name="cards_title" value="\ 更多人氣美味推薦 /">
+                            </div>
+                            <div style="padding: 10px; background: #ffffff; border-radius: 6px; border: 1px solid #eee; margin-bottom: 8px;">
+                                <label style="color:#2a2b26; font-size:13px; margin-bottom:6px;">✦ 商品卡片 1</label>
+                                <div style="margin-bottom: 6px;"><label style="font-size:12px;">商品名稱</label><input type="text" name="card_name_1" value="麻糬鬆餅粉"></div>
+                                <div style="margin-bottom: 6px;"><label style="font-size:12px;">商品連結</label><input type="text" name="card_link_1" value="https://www.heybaker.com/products/batterday-mochi-waffle-powder"></div>
+                                <div><label style="font-size:12px;">商品圖片連結（可複製官網的相關品圖片網址）</label><input type="text" name="card_img_1" value="https://img.shoplineapp.com/media/image_clips/6ab0f643cc1ef20f069f3e7b/original.jpg?1789982275=&owner_id=5acace3800fdde0bc100cbfb"></div>
+                            </div>
+                            <div style="padding: 10px; background: #ffffff; border-radius: 6px; border: 1px solid #eee; margin-bottom: 8px;">
+                                <label style="color:#2a2b26; font-size:13px; margin-bottom:6px;">✦ 商品卡片 2</label>
+                                <div style="margin-bottom: 6px;"><label style="font-size:12px;">商品名稱</label><input type="text" name="card_name_2" value="脆皮奶油年糕粉"></div>
+                                <div style="margin-bottom: 6px;"><label style="font-size:12px;">商品連結</label><input type="text" name="card_link_2" value="https://www.heybaker.com/products/crispy-butter-rice-cake-powder"></div>
+                                <div><label style="font-size:12px;">商品圖片連結（可複製官網的相關品圖片網址）</label><input type="text" name="card_img_2" value="https://img.shoplineapp.com/media/image_clips/6ac48133b6a75abf9b0b309f/original.jpg?1791263025=&owner_id=5acace3800fdde0bc100cbfb"></div>
+                            </div>
+                            <div style="padding: 10px; background: #ffffff; border-radius: 6px; border: 1px solid #eee;">
+                                <label style="color:#2a2b26; font-size:13px; margin-bottom:6px;">✦ 商品卡片 3</label>
+                                <div style="margin-bottom: 6px;"><label style="font-size:12px;">商品名稱</label><input type="text" name="card_name_3" value="超夠味滷包"></div>
+                                <div style="margin-bottom: 6px;"><label style="font-size:12px;">商品連結</label><input type="text" name="card_link_3" value="https://www.heybaker.com/products/batterday-tea-egg-spice-pouch"></div>
+                                <div><label style="font-size:12px;">商品圖片連結（可複製官網的相關品圖片網址）</label><input type="text" name="card_img_3" value="https://img.shoplineapp.com/media/image_clips/6ad9bbf66219b04b386f1a32/original.jpg?1792654325=&owner_id=5acace3800fdde0bc100cbfb"></div>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- 06. 收合選單 Bar 可收合 -->
+                <details class="section-details" draggable="true" data-module="bar_collapse">
+                    <summary class="section-summary">
+                        <div style="display:flex; align-items:center;"><span class="drag-handle" title="按住此處上下拖曳調整順序">⣿</span> 06. 收合選單 Bar (點擊收合)</div>
+                        <div class="summary-actions">
+                            <button type="button" class="move-up-btn" title="上移此區塊">🔼</button>
+                            <button type="button" class="move-down-btn" title="下移此區塊">🔽</button>
+                            <button type="button" class="duplicate-btn" title="新增此區塊">➕</button>
+                            <button type="button" class="delete-btn" title="刪除此區塊">🗑️</button>
+                        </div>
+                    </summary>
+                    <div class="section-body">
+                        <div class="hint">此區域可點擊按鈕收合，按鈕會附上小動畫</div>
+                        <div class="form-group" style="display:flex; gap:10px;">
+                            <div style="flex:2;">
+                                <label>關閉按鈕圖網址</label>
+                                <input type="text" name="bar_c" value="https://img.shoplineapp.com/media/image_clips/6ad9c2c4dfa9264b84ffd4e2/original.jpg?1792656067=&owner_id=5acace3800fdde0bc100cbfb">
+                            </div>
+                            <div style="flex:1;">
+                                <label>替代文字 (Alt)</label>
+                                <input type="text" name="bar_c_alt" value="點擊收合">
+                            </div>
+                        </div>
+                        <div class="form-group" style="display:flex; gap:10px;">
+                            <div style="flex:2;">
+                                <label>展開按鈕圖網址</label>
+                                <input type="text" name="bar_o" value="https://img.shoplineapp.com/media/image_clips/6ad9c527968cd03c6bda59f1/original.jpg?1792656679=&owner_id=5acace3800fdde0bc100cbfb">
+                            </div>
+                            <div style="flex:1;">
+                                <label>替代文字 (Alt)</label>
+                                <input type="text" name="bar_o_alt" value="點擊展開">
+                            </div>
+                        </div>
+                        <div class="form-group" style="display:flex; gap:10px;">
+                            <div style="flex:2;">
+                                <label>影片（貼上YouTube 或 IG Reels的影片連結）</label>
+                                <input type="text" name="vid" value="https://www.youtube.com/embed/4h-BPhtd_8A?si=zCtYADZPKzdsm3uZ">
+                            </div>
+                            <div style="flex:1;">
+                                <label>替代文字 (Alt / 說明)</label>
+                                <input type="text" name="vid_alt" value="示範影片">
+                            </div>
+                        </div>
+                        <div class="form-group" style="display:flex; gap:10px;">
+                            <div style="flex:2;">
+                                <label>食譜圖片網址</label>
+                                <input type="text" name="img" value="https://img.shoplineapp.com/media/image_clips/6a97e03f8df87c16b0c515d8/original.jpg?1788338238=&owner_id=5acace3800fdde0bc100cbfb">
+                            </div>
+                            <div style="flex:1;">
+                                <label>替代文字 (Alt)</label>
+                                <input type="text" name="img_alt" value="內容圖">
+                            </div>
+                        </div>
+
+                        <!-- 內崁：推薦相關品卡片模組 -->
+                        <div style="margin-top: 15px; padding: 12px; background: #fffdf8; border: 1px dashed #ffe59a; border-radius: 6px;">
+                            <label style="color:#2a2b26; font-size:14px; margin-bottom: 6px;">
+                                ✦ 推薦相關品卡片模組 (選填，顯示於本 Bar 底部)
+                            </label>
+                            <div class="hint">推薦商品卡片區塊，電腦版自動平均置中，手機版支援橫向平滑滑動不換行</div>
+                            <div class="form-group" style="padding-bottom:10px; margin-bottom:10px;">
+                                <label>區塊自訂色彩</label>
+                                <div class="color-row" style="flex-wrap: wrap; gap: 10px;">
+                                    <div class="color-item"><input type="color" name="col_cards_bg" value="#ffffff"> 區域底色</div>
+                                    <div class="color-item"><input type="color" name="col_cards_title_txt" value="#605900"> 小標文字色</div>
+                                    <div class="color-item"><input type="color" name="col_cards_pill_bg" value="#acac00"> 商品名字底色</div>
+                                    <div class="color-item"><input type="color" name="col_cards_pill_txt" value="#ffffff"> 商品名字色</div>
+                                </div>
+                            </div>
+                            <div class="form-group" style="padding-bottom:10px; margin-bottom:10px;">
+                                <label>小標文字</label>
+                                <input type="text" name="cards_title" value="\ 更多人氣美味推薦 /">
+                            </div>
+                            <div style="padding: 10px; background: #ffffff; border-radius: 6px; border: 1px solid #eee; margin-bottom: 8px;">
+                                <label style="color:#2a2b26; font-size:13px; margin-bottom:6px;">✦ 商品卡片 1</label>
+                                <div style="margin-bottom: 6px;"><label style="font-size:12px;">商品名稱</label><input type="text" name="card_name_1" value="麻糬鬆餅粉"></div>
+                                <div style="margin-bottom: 6px;"><label style="font-size:12px;">商品連結</label><input type="text" name="card_link_1" value="https://www.heybaker.com/products/batterday-mochi-waffle-powder"></div>
+                                <div><label style="font-size:12px;">商品圖片連結（可複製官網的相關品圖片網址）</label><input type="text" name="card_img_1" value="https://img.shoplineapp.com/media/image_clips/6ab0f643cc1ef20f069f3e7b/original.jpg?1789982275=&owner_id=5acace3800fdde0bc100cbfb"></div>
+                            </div>
+                            <div style="padding: 10px; background: #ffffff; border-radius: 6px; border: 1px solid #eee; margin-bottom: 8px;">
+                                <label style="color:#2a2b26; font-size:13px; margin-bottom:6px;">✦ 商品卡片 2</label>
+                                <div style="margin-bottom: 6px;"><label style="font-size:12px;">商品名稱</label><input type="text" name="card_name_2" value="脆皮奶油年糕粉"></div>
+                                <div style="margin-bottom: 6px;"><label style="font-size:12px;">商品連結</label><input type="text" name="card_link_2" value="https://www.heybaker.com/products/crispy-butter-rice-cake-powder"></div>
+                                <div><label style="font-size:12px;">商品圖片連結（可複製官網的相關品圖片網址）</label><input type="text" name="card_img_2" value="https://img.shoplineapp.com/media/image_clips/6ac48133b6a75abf9b0b309f/original.jpg?1791263025=&owner_id=5acace3800fdde0bc100cbfb"></div>
+                            </div>
+                            <div style="padding: 10px; background: #ffffff; border-radius: 6px; border: 1px solid #eee;">
+                                <label style="color:#2a2b26; font-size:13px; margin-bottom:6px;">✦ 商品卡片 3</label>
+                                <div style="margin-bottom: 6px;"><label style="font-size:12px;">商品名稱</label><input type="text" name="card_name_3" value="超夠味滷包"></div>
+                                <div style="margin-bottom: 6px;"><label style="font-size:12px;">商品連結</label><input type="text" name="card_link_3" value="https://www.heybaker.com/products/batterday-tea-egg-spice-pouch"></div>
+                                <div><label style="font-size:12px;">商品圖片連結（可複製官網的相關品圖片網址）</label><input type="text" name="card_img_3" value="https://img.shoplineapp.com/media/image_clips/6ad9bbf66219b04b386f1a32/original.jpg?1792654325=&owner_id=5acace3800fdde0bc100cbfb"></div>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- 07. 底部資訊 -->
+                <details class="section-details" draggable="true" data-module="footer">
+                    <summary class="section-summary">
+                        <div style="display:flex; align-items:center;"><span class="drag-handle" title="按住此處上下拖曳調整順序">⣿</span> 07. 底部資訊</div>
+                        <div class="summary-actions">
+                            <button type="button" class="move-up-btn" title="上移此區塊">🔼</button>
+                            <button type="button" class="move-down-btn" title="下移此區塊">🔽</button>
+                            <button type="button" class="duplicate-btn" title="新增此區塊">➕</button>
+                            <button type="button" class="delete-btn" title="刪除此區塊">🗑️</button>
+                        </div>
+                    </summary>
+                    <div class="section-body">
+                        <div class="form-group"><label>商品成分圖片網址</label><input type="text" name="img_ingredient" value="https://img.shoplineapp.com/media/image_clips/6ad9bbf741ee91c908c33e6b/original.jpg?1792654326=&owner_id=5acace3800fdde0bc100cbfb"></div>
+                        <div class="form-group">
+                            <label>品牌精神標語文字</label>
+                            <input type="text" name="brand_slogan" value="焙日Bake a BatterDay！與你一起完成的暖心餐桌">
+                            <div class="color-row">
+                                <div class="color-item"><input type="color" name="col_slogan_txt" value="#2a2b26"> 文字顏色</div>
+                            </div>
+                        </div>
+                        <div class="form-group"><label>責任險圖片網址</label><input type="text" name="img_insurance" value="https://img.shoplineapp.com/media/image_clips/6a9901860de81d04e883e041/original.jpg?1788412294=&owner_id=5acace3800fdde0bc100cbfb"></div>
+                        <div style="padding: 10px 14px; background: #fdfbf7; border: 1px dashed #ffe59a; border-radius: 4px; margin-top: 15px; font-size: 13px; color: #666;">
+                            <span style="font-weight: bold; color: #2a2b26;">✦ LINE 客服模組</span>：已設定為固定資訊，會自動嵌入於底部，無需手動填寫
+                        </div>
+                    </div>
+                </details>
+
+                <!-- 08. 商品詳細規格 -->
+                <details class="section-details" draggable="true" data-module="specs">
+                    <summary class="section-summary">
+                        <div style="display:flex; align-items:center;"><span class="drag-handle" title="按住此處上下拖曳調整順序">⣿</span> 08. 商品詳細規格</div>
+                        <div class="summary-actions">
+                            <button type="button" class="move-up-btn" title="上移此區塊">🔼</button>
+                            <button type="button" class="move-down-btn" title="下移此區塊">🔽</button>
+                            <button type="button" class="duplicate-btn" title="新增此區塊">➕</button>
+                            <button type="button" class="delete-btn" title="刪除此區塊">🗑️</button>
+                        </div>
+                    </summary>
+                    <div class="section-body">
+                        <div class="hint">
+                            ※ 每一行請用「冒號」分隔標題與內容。第一行品名會自動加粗。「葷素類別」勿更改標題，此段會自動調整為綠色。可按「新增款式」來新增
+                        </div>
+                        
+                        <div class="spec-list" style="display:flex; flex-direction:column; gap:15px;">
+                            <div class="spec-item" style="padding: 10px; background: #fff; border: 1px dashed #ccc; border-radius: 6px; position:relative;">
+                                <label style="font-size:12px; margin-bottom:6px;">款式規格 (支援多行)</label>
+                                <textarea class="spec-content spec-input" style="height: 140px;">品名：【BatterDay焙日】茶葉蛋滷包 (2入)
+成分：八角茴香、桂枝、川芎、甘草、草果、白荳蔻、肉豆蔻、紅茶葉
+規格：1袋2入，每入30g±5g
+保存方式：為避免受潮，開封後請密封冷藏存放避免受潮變質，並盡快使用完畢。
+有效日期：(西元年/月/日) 請見於包裝上
+過敏原資訊：無
+葷素類別：純素可食</textarea>
+                                <button type="button" class="remove-item-btn" style="position:absolute; top:10px; right:10px; background:none; border:none; cursor:pointer; color:#dc2626;" title="移除此款式">✖</button>
+                            </div>
+                        </div>
+                        
+                        <button type="button" class="add-spec-btn" style="width:100%; margin-top:15px; padding:8px; background:#f9fafa; border:1px dashed #b2b3af; border-radius:6px; cursor:pointer; font-weight:bold; color:#666;">➕ 新增款式</button>
+                        
+                        <div class="form-group" style="margin-top: 20px;">
+                            <label>法規購買須知 (紅字)</label>
+                            <textarea name="spec_notice" class="spec-input" style="height: 100px;">＊食品或生鮮商品屬於消耗性商品、商品性質特殊或短效期等，根據消保法無鑑賞期，此類食品食材一律售出後概不受商品退換貨，訂單成立時視為同意此條款。如發生瑕疵或破損等狀況，一律以退費處理。</textarea>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- 09. 補充影片 -->
+                <details class="section-details" draggable="true" data-module="extra">
+                    <summary class="section-summary">
+                        <div style="display:flex; align-items:center;"><span class="drag-handle" title="按住此處上下拖曳調整順序">⣿</span> 09. 補充影片</div>
+                        <div class="summary-actions">
+                            <button type="button" class="move-up-btn" title="上移此區塊">🔼</button>
+                            <button type="button" class="move-down-btn" title="下移此區塊">🔽</button>
+                            <button type="button" class="duplicate-btn" title="新增此區塊">➕</button>
+                            <button type="button" class="delete-btn" title="刪除此區塊">🗑️</button>
+                        </div>
+                    </summary>
+                    <div class="section-body">
+                        <div class="hint">可自由補充影片</div>
+                        <div class="form-group" style="display:flex; gap:10px;">
+                            <div style="flex:2;">
+                                <label>影片網址（複製YouTube 或 IG Reels網址）</label>
+                                <input type="text" name="extra_vid" value="">
+                            </div>
+                            <div style="flex:1;">
+                                <label>替代文字 (Alt/說明)</label>
+                                <input type="text" name="extra_vid_alt" value="補充影片">
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- 10. 補充相關品 (人氣美味推薦卡片) -->
+                <details class="section-details" draggable="true" data-module="related_cards">
+                    <summary class="section-summary">
+                        <div style="display:flex; align-items:center;"><span class="drag-handle" title="按住此處上下拖曳調整順序">⣿</span> 10. 推薦相關品</div>
+                        <div class="summary-actions">
+                            <button type="button" class="move-up-btn" title="上移此區塊">🔼</button>
+                            <button type="button" class="move-down-btn" title="下移此區塊">🔽</button>
+                            <button type="button" class="duplicate-btn" title="新增此區塊">➕</button>
+                            <button type="button" class="delete-btn" title="刪除此區塊">🗑️</button>
+                        </div>
+                    </summary>
+                    <div class="section-body">
+                        <div class="hint">推薦商品卡片區塊，電腦版自動平均置中，手機版支援橫向平滑滑動不換行</div>
+                        <div class="form-group" style="padding-bottom:10px; margin-bottom:10px;">
+                            <label>區塊自訂色彩</label>
+                            <div class="color-row" style="flex-wrap: wrap; gap: 10px;">
+                                <div class="color-item"><input type="color" name="col_cards_bg" value="#ffffff"> 區域底色</div>
+                                <div class="color-item"><input type="color" name="col_cards_title_txt" value="#605900"> 小標文字色</div>
+                                <div class="color-item"><input type="color" name="col_cards_pill_bg" value="#acac00"> 商品名字底色</div>
+                                <div class="color-item"><input type="color" name="col_cards_pill_txt" value="#ffffff"> 商品名字色</div>
+                            </div>
+                        </div>
+                        <div class="form-group" style="padding-bottom:10px; margin-bottom:10px;">
+                            <label>小標文字</label>
+                            <input type="text" name="cards_title" value="\ 更多人氣美味推薦 /">
+                        </div>
+                        <div style="padding: 10px; background: #ffffff; border-radius: 6px; border: 1px solid #eee; margin-bottom: 8px;">
+                            <label style="color:#2a2b26; font-size:13px; margin-bottom:6px;">✦ 商品卡片 1</label>
+                            <div style="margin-bottom: 6px;"><label style="font-size:12px;">商品名稱</label><input type="text" name="card_name_1" value="麻糬鬆餅粉"></div>
+                            <div style="margin-bottom: 6px;"><label style="font-size:12px;">商品連結</label><input type="text" name="card_link_1" value="https://www.heybaker.com/products/batterday-mochi-waffle-powder"></div>
+                            <div><label style="font-size:12px;">商品圖片連結（可複製官網的相關品圖片網址）</label><input type="text" name="card_img_1" value="https://img.shoplineapp.com/media/image_clips/6ab0f643cc1ef20f069f3e7b/original.jpg?1789982275=&owner_id=5acace3800fdde0bc100cbfb"></div>
+                        </div>
+                        <div style="padding: 10px; background: #ffffff; border-radius: 6px; border: 1px solid #eee; margin-bottom: 8px;">
+                            <label style="color:#2a2b26; font-size:13px; margin-bottom:6px;">✦ 商品卡片 2</label>
+                            <div style="margin-bottom: 6px;"><label style="font-size:12px;">商品名稱</label><input type="text" name="card_name_2" value="脆皮奶油年糕粉"></div>
+                            <div style="margin-bottom: 6px;"><label style="font-size:12px;">商品連結</label><input type="text" name="card_link_2" value="https://www.heybaker.com/products/crispy-butter-rice-cake-powder"></div>
+                            <div><label style="font-size:12px;">商品圖片連結（可複製官網的相關品圖片網址）</label><input type="text" name="card_img_2" value="https://img.shoplineapp.com/media/image_clips/6ac48133b6a75abf9b0b309f/original.jpg?1791263025=&owner_id=5acace3800fdde0bc100cbfb"></div>
+                        </div>
+                        <div style="padding: 10px; background: #ffffff; border-radius: 6px; border: 1px solid #eee;">
+                            <label style="color:#2a2b26; font-size:13px; margin-bottom:6px;">✦ 商品卡片 3</label>
+                            <div style="margin-bottom: 6px;"><label style="font-size:12px;">商品名稱</label><input type="text" name="card_name_3" value="超夠味滷包"></div>
+                            <div style="margin-bottom: 6px;"><label style="font-size:12px;">商品連結</label><input type="text" name="card_link_3" value="https://www.heybaker.com/products/batterday-tea-egg-spice-pouch"></div>
+                            <div><label style="font-size:12px;">商品圖片連結（可複製官網的相關品圖片網址）</label><input type="text" name="card_img_3" value="https://img.shoplineapp.com/media/image_clips/6ad9bbf66219b04b386f1a32/original.jpg?1792654325=&owner_id=5acace3800fdde0bc100cbfb"></div>
+                        </div>
+                    </div>
+                </details>
+
+            </form>
+        </div>
+
+        <!-- 右側產出區 -->
+        <div class="right-panel">
+            <div class="tabs">
+                <button class="tab-btn active" data-target="code-view">💻 HTML 程式碼</button>
+                <button class="tab-btn" data-target="preview-view">👀 Shopline 前台預覽</button>
+            </div>
+            
+            <div id="code-view" class="tab-content active">
+                <div class="code-area-wrapper">
+                    <button class="copy-btn" id="copyBtn">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                        一鍵複製代碼                    </button>
+                    <textarea id="outputCode" readonly></textarea>
+                </div>
+            </div>
+
+            <div id="preview-view" class="tab-content">
+                <div class="preview-wrapper">
+                    <div class="preview-container" id="previewContainer"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast">✅ 代碼已成功複製！請貼入 Shopline Toggle HTML區域<code>&lt;/&gt;</code> 中。</div>
+
+    <script>
+        // 綁定動態新增段落按鈕 (特點介紹、圖片、規格)
+        document.getElementById('form-container').addEventListener('click', (e) => {
+            if (e.target.matches('.add-feature-btn')) {
+                const list = e.target.previousElementSibling;
+                const html = `
+                    <div class="feature-item" style="padding: 10px; background: #fff; border: 1px dashed #ccc; border-radius: 6px; position:relative;">
+                        <div style="margin-bottom:8px;">
+                            <label style="font-size:12px;">小標題</label>
+                            <input type="text" class="feat-title" value="">
+                        </div>
+                        <div>
+                            <label style="font-size:12px;">內文段落 (支援多行)</label>
+                            <textarea class="feat-content spec-input" style="height: 60px;"></textarea>
+                        </div>
+                        <button type="button" class="remove-item-btn" style="position:absolute; top:10px; right:10px; background:none; border:none; cursor:pointer; color:#dc2626;" title="移除此段落">✖</button>
+                    </div>`;
+                list.insertAdjacentHTML('beforeend', html);
+                updateColors();
+                generateCode();
+            }
+            if (e.target.matches('.add-image-btn')) {
+                const list = e.target.previousElementSibling;
+                const html = `
+                    <div class="image-item" style="padding: 10px; background: #fff; border: 1px dashed #ccc; border-radius: 6px; position:relative; display:flex; gap:10px; align-items:flex-end;">
+                        <div style="flex:2;">
+                            <label style="font-size:12px;">圖片網址</label>
+                            <input type="text" class="img-url" value="">
+                        </div>
+                        <div style="flex:1;">
+                            <label style="font-size:12px;">替代文字 (Alt)</label>
+                            <input type="text" class="img-alt" value="">
+                        </div>
+                        <button type="button" class="remove-item-btn" style="background:none; border:none; cursor:pointer; color:#dc2626; padding-bottom:10px;" title="移除此圖片">✖</button>
+                    </div>`;
+                list.insertAdjacentHTML('beforeend', html);
+                updateColors();
+                generateCode();
+            }
+            if (e.target.matches('.add-spec-btn')) {
+                const list = e.target.previousElementSibling;
+                const html = `
+                    <div class="spec-item" style="padding: 10px; background: #fff; border: 1px dashed #ccc; border-radius: 6px; position:relative;">
+                        <label style="font-size:12px; margin-bottom:6px;">款式規格 (支援多行)</label>
+                        <textarea class="spec-content spec-input" style="height: 100px;"></textarea>
+                        <button type="button" class="remove-item-btn" style="position:absolute; top:10px; right:10px; background:none; border:none; cursor:pointer; color:#dc2626;" title="移除此款式">✖</button>
+                    </div>`;
+                list.insertAdjacentHTML('beforeend', html);
+                updateColors();
+                generateCode();
+            }
+            if (e.target.matches('.remove-item-btn')) {
+                e.target.parentElement.remove();
+                updateColors();
+                generateCode();
+            }
+            if (e.target.closest('.summary-actions button')) {
+                e.preventDefault();
+            }
+            if (e.target.closest('.duplicate-btn')) {
+                const sec = e.target.closest('.section-details');
+                const clone = sec.cloneNode(true);
+                clone.setAttribute('open', '');
+                sec.parentNode.insertBefore(clone, sec.nextSibling);
+                const origInputs = sec.querySelectorAll('input, textarea');
+                const cloneInputs = clone.querySelectorAll('input, textarea');
+                origInputs.forEach((input, i) => cloneInputs[i].value = input.value);
+                
+                updateColors();
+                generateCode();
+                clone.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            if (e.target.closest('.delete-btn')) {
+                const sec = e.target.closest('.section-details');
+                if(confirm("確定要刪除這個區塊嗎？")) {
+                    sec.remove();
+                    updateColors();
+                    generateCode();
+                }
+            }
+            // === 🔼 上移 / 🔽 下移 雙軌排序機制 ===
+            if (e.target.closest('.move-up-btn')) {
+                const sec = e.target.closest('.section-details');
+                const prev = sec.previousElementSibling;
+                if (prev && prev.classList.contains('section-details')) {
+                    sec.parentNode.insertBefore(sec, prev);
+                    updateColors();
+                    generateCode();
+                    sec.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }
+            if (e.target.closest('.move-down-btn')) {
+                const sec = e.target.closest('.section-details');
+                const next = sec.nextElementSibling;
+                if (next && next.classList.contains('section-details')) {
+                    sec.parentNode.insertBefore(next, sec);
+                    updateColors();
+                    generateCode();
+                    sec.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }
+        });
+
+        document.getElementById('form-container').addEventListener('input', (e) => {
+            if(e.target.matches('input[type="text"], textarea.spec-input, input[type="color"]')) {
+                updateColors();
+                generateCode();
+            }
+        });
+
+        function val(sec, name) { 
+            const el = sec.querySelector('[name="' + name + '"]');
+            return el ? el.value.trim() : ""; 
+        }
+
+        function cleanUrl(url) { 
+            if(!url) return ""; 
+            return url.split('#')[0]; 
+        }
+
+        // === 智慧雙棲影音解析函式 ===
+        function parseVideo(str) {
+            if (!str) return null;
+            str = str.trim();
+            let type = 'other';
+            let url = str;
+            const iframeMatch = str.match(/src=["']([^"']+)["']/i);
+            if (iframeMatch && iframeMatch[1]) url = iframeMatch[1];
+            const igMatch = url.match(/instagram\.com\/(?:reel|reels|p)\/([a-zA-Z0-9_-]+)/);
+            if (igMatch && igMatch[1]) return { type: 'instagram', url: "https://www.instagram.com/reel/" + igMatch[1] + "/embed" };
+            const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([a-zA-Z0-9_-]{11})/);
+            if (ytMatch && ytMatch[1]) return { type: 'youtube', url: "https://www.youtube.com/embed/" + ytMatch[1] };
+            return { type: 'other', url: url };
+        }
+
+        function genCards(sec) {
+            let title = val(sec, 'cards_title');
+            let bg = val(sec, 'col_cards_bg') || '#ffffff';
+            let titleTxt = val(sec, 'col_cards_title_txt') || '#2a2b26';
+            let pillBg = val(sec, 'col_cards_pill_bg') || '#ffe59a';
+            let pillTxt = val(sec, 'col_cards_pill_txt') || '#2a2b26';
+
+            let cardsHtml = '';
+            let hasCards = false;
+
+            for (let i = 1; i <= 3; i++) {
+                let link = val(sec, 'card_link_' + i);
+                let img = val(sec, 'card_img_' + i);
+                let name = val(sec, 'card_name_' + i);
+
+                if (name || img || link) {
+                    hasCards = true;
+                    cardsHtml += '    <a href="' + (link || '#') + '" target="_blank" class="custom-card-item">\n';
+                    cardsHtml += '      <div class="custom-card-img-wrap">\n';
+                    if (img) {
+                        cardsHtml += '        <img src="' + img + '" alt="' + (name || '推薦商品') + '">\n';
+                    }
+                    cardsHtml += '      </div>\n';
+                    if (name) {
+                        cardsHtml += '      <span class="custom-card-name-pill" style="background-color: ' + pillBg + '; color: ' + pillTxt + ';">\n';
+                        cardsHtml += '        ' + name + '\n';
+                        cardsHtml += '      </span>\n';
+                    }
+                    cardsHtml += '    </a>\n\n';
+                }
+            }
+
+            if (!hasCards && !title) return "";
+
+            let html = '  <!-- 🌟 推薦商品卡片模組（支援手機橫向滑動 + 電腦版平均置中） 🌟 -->\n';
+            html += '  <div class="custom-cards-section" style="background-color: ' + bg + ';">\n';
+            if (title) {
+                html += '    <div class="custom-cards-title" style="color: ' + titleTxt + ';">' + title + '</div>\n\n';
+            }
+            if (hasCards) {
+                html += '    <div class="custom-cards-grid">\n' + cardsHtml + '    </div>\n';
+            }
+            html += '  </div>\n';
+            return html;
+        }
+
+        // === 各區塊產生邏輯 ===
+        function genBasic(sec) {
+            let html = '';
+            let title = val(sec, 'title');
+            let promo = val(sec, 'promo');
+            
+            if(title) html += '  <h2 style="color: #666666; font-size: 20px; font-weight: bold; margin: 10px 0 5px;">' + title + '</h2>\n';
+            if(promo) html += '  <p style="color: ' + val(sec, 'col_promo') + '; font-size: 17px; font-weight: bold; margin: 5px 0 20px; letter-spacing: 1px;">' + promo + '</p>\n';
+            
+            let lineTop = val(sec, 'line_top');
+            let lineMain1 = val(sec, 'line_main1');
+            if (lineTop || lineMain1) {
+                html += '  <!-- LINE 好友優惠 -->\n  <div style="margin: 15px auto 20px; text-align: center;">\n';
+                if(lineTop) html += '    <p style="color: #55b733; font-size: 18px; font-weight: bold; margin: 5px 0;">' + lineTop + '</p>\n';
+                
+                let linePriceHtml = val(sec, 'line_price') ? '<span style="background-color: #fff39c; color: #000; padding: 2px 6px;">' + val(sec, 'line_price') + '</span>' : '';
+                html += '    <p style="color:#666666; font-size: 18px; font-weight: bold; margin: 5px 0;">' + lineMain1 + ' ' + linePriceHtml + ' ' + val(sec, 'line_main2') + '</p>\n';
+                html += '    <div style="margin: 12px 0 8px;">\n      <a href="https://lin.ee/pbOjXQ5" target="_blank">\n        <img src="https://img.shoplineapp.com/media/image_clips/6a8d39b33d903c41e29a1a1c/original.jpg?1787640243=&owner_id=5acace3800fdde0bc100cbfb" alt="LINE好友按鈕" style="max-width: 90%; width: 200px; height: auto; display: block; margin: 0 auto;">\n      </a>\n    </div>\n';
+                html += '    <p style="margin: 5px 0;">\n      <a href="https://lin.ee/pbOjXQ5" target="_blank" style="color: #55b733; font-size: 17px; font-weight: bold; text-decoration: none;">加入LINE好友，馬上領、馬上用！</a>\n    </p>\n';
+                let desc = val(sec, 'line_desc');
+                if(desc) {
+                    let descLines = desc.split('\n');
+                    descLines.forEach((d, i) => {
+                        if(d.trim()) {
+                            let bottomMargin = (i === descLines.length - 1) ? '15px' : '3px';
+                            html += '    <p style="color: #666666; font-size: 14px; margin: 3px 0 ' + bottomMargin + ';">' + d.trim() + '</p>\n';
+                        }
+                    });
+                }
+                html += '  </div>\n';
+            }
+            
+            let btnTxt = val(sec, 'recipe_btn_text');
+            let btnUrl = val(sec, 'recipe_url');
+            if(btnTxt && btnUrl) {
+                html += '  <a href="' + cleanUrl(btnUrl) + '#recipe-section" class="scroll-to-recipe-btn" data-btn-txt="' + val(sec, 'col_btn_txt') + '" data-btn-bd="' + val(sec, 'col_btn_border') + '" data-btn-bg="' + val(sec, 'col_btn_bg') + '">' + btnTxt + '</a>\n';
+            }
+            return html;
+        }
+
+        function genFeatures(sec) {
+            let html = '  <div style="background-color: ' + (val(sec, 'col_feat_bg') || '#ffffff') + '; max-width: 750px; width: 100%; margin: 0 auto; padding: 30px 15px 35px; box-sizing: border-box; border-radius: 0;">\n';
+            const tBg = val(sec, 'col_feat_title_bg');
+            const tTxt = val(sec, 'col_feat_title_txt');
+            const cTxt = val(sec, 'col_feat_content_txt');
+            
+            const items = sec.querySelectorAll('.feature-item');
+            items.forEach(item => {
+                const titleEl = item.querySelector('.feat-title');
+                const contentEl = item.querySelector('.feat-content');
+                const title = titleEl ? titleEl.value.trim() : "";
+                const content = contentEl ? contentEl.value.trim() : "";
+                if(!title && !content) return;
+                
+                if(title) {
+                    html += '    <p style="color: ' + tTxt + '; background-color: ' + tBg + '; font-size: 18px; font-weight: bold; display: inline-block; padding: 4px 12px; border-radius: 4px; margin: 0 0 8px;">\n      ' + title + '\n    </p>\n';
+                }
+                if(content) {
+                    const lines = content.split('\n');
+                    lines.forEach((line, i) => {
+                        if(line.trim()) {
+                            const isLast = (i === lines.length - 1);
+                            html += '    <p style="color: ' + cTxt + '; font-size: 16px; margin: 4px 0 ' + (isLast ? '20px' : '0') + ';">' + line.trim() + '</p>\n';
+                        }
+                    });
+                }
+            });
+            
+            html += '  </div>\n';
+            return html;
+        }
+
+        function genImages(sec) {
+            let html = '';
+            const items = sec.querySelectorAll('.image-item');
+            items.forEach(item => {
+                const urlEl = item.querySelector('.img-url');
+                const altEl = item.querySelector('.img-alt');
+                const url = urlEl ? urlEl.value.trim() : "";
+                const alt = altEl ? altEl.value.trim() : "";
+                if(url) {
+                    html += '  <img class="seamless-img" src="' + url + '" alt="' + (alt || '商品圖片') + '">\n';
+                }
+            });
+            return html;
+        }
+
+        function genRecipeBanner(sec) {
+            let html = '';
+            let imgB = val(sec, 'img_recipe_banner');
+            let altB = val(sec, 'alt_recipe_banner');
+            if(imgB) {
+                html += '  <div id="recipe-section" style="scroll-margin-top: 65vh !important; height: 0; line-height: 0; margin: 0; padding: 0;"></div>\n';
+                html += '  <img class="seamless-img" src="' + imgB + '" alt="' + (altB || '食譜圖') + '">\n';
+            }
+            return html;
+        }
+
+        function genBarFixed(sec) {
+            let html = '';
+            let barImg = val(sec, 'bar_title');
+            let barAlt = val(sec, 'bar_title_alt') || 'Bar標題';
+            if(barImg) {
+                html += '    <div class="custom-details">\n      <div class="custom-summary custom-fixed-bar">\n        <img src="' + barImg + '" alt="' + barAlt + '">\n      </div>\n      <div class="custom-content">\n';
+                let vidData = parseVideo(val(sec, 'vid'));
+                let vidAlt = val(sec, 'vid_alt') || '示範影片';
+                if(vidData) {
+                    if(vidData.type === 'instagram') {
+                        html += '        <div class="custom-ig-wrapper"><iframe src="' + vidData.url + '" title="' + vidAlt + '" allowfullscreen scrolling="no" frameborder="0"></iframe></div>\n';
+                    } else if(vidData.type === 'youtube') {
+                        html += '        <div class="custom-video-wrapper"><iframe src="' + vidData.url + '" title="' + vidAlt + '" allowfullscreen></iframe></div>\n';
+                    } else {
+                        html += '        <div class="custom-other-wrapper"><iframe src="' + vidData.url + '" title="' + vidAlt + '" allowfullscreen></iframe></div>\n';
+                    }
+                }
+                let img = val(sec, 'img');
+                let imgAlt = val(sec, 'img_alt') || '內容圖';
+                if(img) html += '        <img class="seamless-img" src="' + img + '" alt="' + imgAlt + '">\n';
+
+                // 人氣美味推薦卡片 (置於內容圖片下方)
+                let cardsHtml = genCards(sec);
+                if(cardsHtml) html += cardsHtml;
+
+                html += '      </div>\n    </div>\n';
+            }
+            return html;
+        }
+        
+        function genBarCollapse(sec) {
+            let html = '';
+            let closeImg = val(sec, 'bar_c');
+            let closeAlt = val(sec, 'bar_c_alt') || '點擊收合';
+            let openImg = val(sec, 'bar_o');
+            let openAlt = val(sec, 'bar_o_alt') || '點擊展開';
+            if(closeImg) {
+                html += '    <details class="custom-details">\n      <summary class="custom-summary">\n        <img class="bar-closed" src="' + closeImg + '" alt="' + closeAlt + '">\n        <img class="bar-open" src="' + openImg + '" alt="' + openAlt + '">\n      </summary>\n      <div class="custom-content">\n';
+                let vidData = parseVideo(val(sec, 'vid'));
+                let vidAlt = val(sec, 'vid_alt') || '示範影片';
+                if(vidData) {
+                    if(vidData.type === 'instagram') {
+                        html += '        <div class="custom-ig-wrapper"><iframe src="' + vidData.url + '" title="' + vidAlt + '" allowfullscreen scrolling="no" frameborder="0"></iframe></div>\n';
+                    } else if(vidData.type === 'youtube') {
+                        html += '        <div class="custom-video-wrapper"><iframe src="' + vidData.url + '" title="' + vidAlt + '" allowfullscreen></iframe></div>\n';
+                    } else {
+                        html += '        <div class="custom-other-wrapper"><iframe src="' + vidData.url + '" title="' + vidAlt + '" allowfullscreen></iframe></div>\n';
+                    }
+                }
+                let img = val(sec, 'img');
+                let imgAlt = val(sec, 'img_alt') || '內容圖';
+                if(img) html += '        <img class="seamless-img" src="' + img + '" alt="' + imgAlt + '">\n';
+
+                // 人氣美味推薦卡片 (置於內容圖片下方)
+                let cardsHtml = genCards(sec);
+                if(cardsHtml) html += cardsHtml;
+
+                html += '      </div>\n    </details>\n';
+            }
+            return html;
+        }
+
+        function genFooter(sec) {
+            let html = '';
+            let imgIng = val(sec, 'img_ingredient');
+            if(imgIng) html += '  <img class="seamless-img" src="' + imgIng + '" alt="成分資訊">\n';
+            
+            let slogan = val(sec, 'brand_slogan');
+            if(slogan) {
+                html += '  <div style="background-color: transparent; padding: 15px; border-radius: 0; margin: 20px auto; color: ' + val(sec, 'col_slogan_txt') + '; font-size: 16px; font-weight: bold; line-height: 1.6; text-align: center;">\n    ' + slogan + '\n  </div>\n';
+            }
+            let imgIns = val(sec, 'img_insurance');
+            if(imgIns) html += '  <img class="seamless-img" src="' + imgIns + '" alt="責任險">\n';
+            
+            html += '  <p style="color: #666666; font-size: 15px; margin: 15px auto; text-align: center;">\n    有問題歡迎加入官方LINE，將有專人為您處理 \n    <a href="https://heybaker.tw/3W9aXSX" target="_blank" style="vertical-align: middle; display: inline-block; margin-left: 5px;">\n      <img src="https://img.shoplineapp.com/media/image_clips/6a336bdfb673df54ebd84e32/original.png?1781754847=&amp;owner_id=5acace3800fdde0bc100cbfb" alt="加入好友" style="height: 36px; width: auto; display: inline-block; margin: 0; vertical-align: middle;">\n    </a>\n  </p>\n';
+            
+            return html;
+        }
+
+        function genSpecs(sec) {
+            let specsCount = 0;
+            let specsBlocksHtml = "";
+            const items = sec.querySelectorAll('.spec-item');
+            
+            items.forEach(item => {
+                const specEl = item.querySelector('.spec-content');
+                const specRaw = specEl ? specEl.value : "";
+                if(specRaw && specRaw.trim() !== "") {
+                    if(specsCount > 0) {
+                        specsBlocksHtml += '\n    <hr style="border: none; border-top: 1px dashed #ddd; margin: 15px 0;">\n\n';
+                    }
+                    const lines = specRaw.split('\n');
+                    lines.forEach(line => {
+                        line = line.trim();
+                        if(!line) return;
+                        let colonIdx = line.indexOf('：');
+                        if(colonIdx === -1) colonIdx = line.indexOf(':');
+
+                        if (colonIdx !== -1) {
+                            let key = line.substring(0, colonIdx).trim();
+                            let valStr = line.substring(colonIdx + 1).trim();
+                            
+                            if(key.includes("品名")) {
+                                specsBlocksHtml += '    <p style="margin: 3px 0; font-size: 16px; color: #333;"><b>' + key + '：' + valStr + '</b></p>\n';
+                            } else if(key.includes("葷素")) {
+                                specsBlocksHtml += '    <p style="color: #729119; font-weight: bold; margin: 3px 0;">' + key + '：' + valStr + '</p>\n';
+                            } else {
+                                specsBlocksHtml += '    <p style="margin: 3px 0; color: #666666;"><b>' + key + '：</b>' + valStr + '</p>\n';
+                            }
+                        } else {
+                            specsBlocksHtml += '    <p style="margin: 3px 0; color: #666666;">' + line + '</p>\n';
+                        }
+                    });
+                    specsCount++;
+                }
+            });
+
+            let finalSpecsHtml = "";
+            let notice = val(sec, 'spec_notice');
+            if(specsCount > 0 || notice) {
+                finalSpecsHtml += '  <div style="background-color: #f9f9f9; padding: 18px; border-radius: 0; text-align: left; font-size: 15px; color: #666666; line-height: 1.8; margin: 20px auto; max-width: 750px; box-sizing: border-box;">\n\n';
+                finalSpecsHtml += specsBlocksHtml;
+                if(notice) {
+                    finalSpecsHtml += '\n    <p style="color: #d18080; font-size: 13px; margin-top: 12px; line-height: 1.6;">\n      ' + notice.replace(/\n/g, '<br>') + '\n    </p>\n';
+                }
+                finalSpecsHtml += '  </div>\n';
+            }
+            return finalSpecsHtml;
+        }
+
+        function genExtra(sec) {
+            let html = '';
+            let vidData = parseVideo(val(sec, 'extra_vid'));
+            let vidAlt = val(sec, 'extra_vid_alt') || '補充影片';
+
+            if(vidData) {
+                html += '  <div style="margin: 20px auto; max-width: 750px; text-align: center; box-sizing: border-box;">\n';
+                if(vidData.type === 'instagram') {
+                    html += '    <div class="custom-ig-wrapper" style="margin-top: 15px;"><iframe src="' + vidData.url + '" title="' + vidAlt + '" allowfullscreen scrolling="no" frameborder="0"></iframe></div>\n';
+                } else if(vidData.type === 'youtube') {
+                    html += '    <div class="custom-video-wrapper" style="margin-top: 15px;"><iframe src="' + vidData.url + '" title="' + vidAlt + '" allowfullscreen></iframe></div>\n';
+                } else {
+                    html += '    <div class="custom-other-wrapper" style="margin-top: 15px;"><iframe src="' + vidData.url + '" title="' + vidAlt + '" allowfullscreen></iframe></div>\n';
+                }
+                html += '  </div>\n';
+            }
+            return html;
+        }
+
+        function generateCode() {
+            let finalHtml = '';
+            let inAccordion = false;
+            
+            let gBtnTxt = '#2a2b26', gBtnBd = '#2a2b26', gBtnBg = '#ffe59a';
+            
+            const sections = document.querySelectorAll('.section-details');
+            sections.forEach(sec => {
+                const mod = sec.getAttribute('data-module');
+                
+                if (mod === 'bar_fixed' || mod === 'bar_collapse') {
+                    let barHtml = "";
+                    if(mod === 'bar_fixed') barHtml = genBarFixed(sec);
+                    if(mod === 'bar_collapse') barHtml = genBarCollapse(sec);
+                    
+                    if (barHtml) {
+                        if (!inAccordion) {
+                            finalHtml += '  <div class="custom-accordion-box">\n';
+                            inAccordion = true;
+                        }
+                        finalHtml += barHtml;
+                    }
+                } else {
+                    if (inAccordion) {
+                        finalHtml += '  </div>\n';
+                        inAccordion = false;
+                    }
+                    
+                    if (mod === 'basic') {
+                        finalHtml += genBasic(sec);
+                        if(val(sec, 'col_btn_txt')) gBtnTxt = val(sec, 'col_btn_txt');
+                        if(val(sec, 'col_btn_border')) gBtnBd = val(sec, 'col_btn_border');
+                        if(val(sec, 'col_btn_bg')) gBtnBg = val(sec, 'col_btn_bg');
+                    }
+                    else if (mod === 'features') finalHtml += genFeatures(sec);
+                    else if (mod === 'images') finalHtml += genImages(sec);
+                    else if (mod === 'recipe_banner') finalHtml += genRecipeBanner(sec);
+                    else if (mod === 'footer') finalHtml += genFooter(sec);
+                    else if (mod === 'specs') finalHtml += genSpecs(sec);
+                    else if (mod === 'extra') finalHtml += genExtra(sec);
+                    else if (mod === 'related_cards') finalHtml += genCards(sec);
+                }
+            });
+            
+            if (inAccordion) {
+                finalHtml += '  </div>\n';
+            }
+            
+            const rawBaseCSS = `
+  <style>
+    .custom-video-wrapper { position: relative !important; width: 100% !important; max-width: 750px !important; aspect-ratio: 16 / 9 !important; margin: 0 auto !important; padding: 0 !important; overflow: hidden !important; line-height: 0 !important; background-color: #ffffff !important; border-radius: 0 !important; }
+    .custom-video-wrapper iframe { position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; border: none !important; margin: 0 !important; padding: 0 !important; }
+    .custom-ig-wrapper { position: relative !important; width: 100% !important; max-width: 500px !important; aspect-ratio: 5 / 8 !important; margin: 20px auto !important; padding: 0 !important; overflow: hidden !important; line-height: 0 !important; text-align: center !important; border-radius: 8px !important; }
+    .custom-ig-wrapper iframe { position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; border: 1px solid #e5e7eb !important; border-radius: 8px !important; margin: 0 auto !important; display: block !important; background-color: #ffffff !important; box-shadow: 0 4px 12px rgba(0,0,0,0.06) !important; }
+    .custom-other-wrapper { width: 100% !important; max-width: 750px !important; margin: 0 auto !important; text-align: center !important; }
+    .custom-other-wrapper iframe { max-width: 100% !important; }
+    .seamless-img { width: 100% !important; max-width: 750px !important; height: auto !important; display: block !important; margin: 0 auto !important; padding: 0 !important; border: none !important; vertical-align: bottom !important; border-radius: 0 !important; }
+    html { scroll-behavior: smooth !important; }
+    .scroll-to-recipe-btn { display: inline-block; background-color: [[COL_BTN_BG]]; color: [[COL_BTN_TXT]] !important; border: 2px solid [[COL_BTN_BORDER]]; font-size: 18px; font-weight: bold; text-decoration: none; padding: 10px 24px; border-radius: 30px; margin: 5px auto 25px auto; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05); transition: all 0.3s ease; animation: button-bounce 2s infinite; cursor: pointer; }
+    .scroll-to-recipe-btn:hover { background-color: [[COL_BTN_BORDER]]; color: #ffffff !important; transform: scale(1.05); box-shadow: 0 6px 12px rgba(42, 43, 38, 0.2); animation: none; }
+    @keyframes button-bounce { 0%, 20%, 50%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-8px); } 60% { transform: translateY(-4px); } }
+    .custom-accordion-box { max-width: 750px !important; width: 100% !important; margin: 0 auto !important; padding: 0 !important; box-sizing: border-box !important; background-color: #ffffff !important; border-radius: 0 !important; border: none !important; overflow: hidden !important; line-height: 0 !important; }
+    .custom-details, details.custom-details, details.custom-details[open] { margin: 0 !important; padding: 0 !important; border: none !important; background-color: #ffffff !important; display: block !important; border-radius: 0 !important; line-height: 0 !important; }
+    .custom-summary, summary.custom-summary, .custom-fixed-bar { list-style: none !important; cursor: pointer !important; display: block !important; margin: 0 !important; padding: 0 !important; border: none !important; outline: none !important; background-color: #ffffff !important; transition: transform 0.25s ease-out !important; line-height: 0 !important; will-change: transform; border-radius: 0 !important; }
+    .custom-summary:hover { transform: scale(1.03) !important; }
+    .custom-summary::-webkit-details-marker { display: none !important; }
+    .custom-summary::before, .custom-summary::after { display: none !important; content: none !important; }
+    .custom-summary img { width: 100% !important; max-width: 100% !important; height: auto !important; display: block !important; margin: 0 !important; padding: 0 !important; border: none !important; box-shadow: none !important; background-color: #ffffff !important; vertical-align: bottom !important; border-radius: 0 !important; }
+    @keyframes bar-bounce-anim { 0%, 20%, 50%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-6px); } 60% { transform: translateY(-3px); } }
+    details:not([open]) .custom-summary img { animation: bar-bounce-anim 2s infinite !important; will-change: transform; }
+    details:not([open]) .custom-summary:hover img { animation-play-state: paused !important; }
+    .custom-fixed-bar { cursor: default !important; }
+    .custom-fixed-bar:hover { transform: none !important; }
+    .custom-fixed-bar img { animation: none !important; }
+    .custom-summary .bar-open { display: none !important; }
+    .custom-summary .bar-closed { display: block !important; }
+    details[open] .custom-summary .bar-closed { display: none !important; }
+    details[open] .custom-summary .bar-open { display: block !important; }
+    .custom-content { margin: 0 !important; padding: 0 !important; border: none !important; background-color: #ffffff !important; display: block !important; line-height: 0 !important; border-radius: 0 !important; }
+    .custom-content img { width: 100% !important; max-width: 100% !important; height: auto !important; display: block !important; margin: 0 !important; padding: 0 !important; border: none !important; background-color: #ffffff !important; vertical-align: bottom !important; border-radius: 0 !important; }
+    
+    /* 推薦商品卡片模組（支援手機橫向滑動 + 電腦版平均置中） */
+    .custom-cards-section {
+        width: 100% !important;
+        max-width: 750px !important;
+        margin: 0 auto !important;
+        padding: 30px 15px 35px !important;
+        box-sizing: border-box !important;
+        text-align: center !important;
+        line-height: 1.5 !important;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+        border-radius: 0 !important;
+    }
+    .custom-cards-title {
+        font-size: 18px !important;
+        font-weight: bold !important;
+        margin: 0 0 20px 0 !important;
+        letter-spacing: 1px !important;
+        display: inline-block !important;
+        line-height: 1.4 !important;
+    }
+    .custom-cards-grid {
+        display: flex !important;
+        justify-content: center !important;
+        align-items: stretch !important;
+        width: 100% !important;
+        margin: 0 auto !important;
+        padding: 0 !important;
+        box-sizing: border-box !important;
+        flex-wrap: nowrap !important;
+    }
+    .custom-card-item {
+        flex: 1 1 0 !important;
+        max-width: 220px !important;
+        min-width: 0 !important;
+        margin: 0 6px !important;
+        text-decoration: none !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        box-sizing: border-box !important;
+        transition: transform 0.25s ease, box-shadow 0.25s ease !important;
+        background-color: #ffffff !important;
+        border-radius: 12px !important;
+        padding: 10px !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06) !important;
+    }
+    .custom-card-item:hover {
+        transform: translateY(-4px) !important;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12) !important;
+    }
+    .custom-card-img-wrap {
+        width: 100% !important;
+        border-radius: 8px !important;
+        overflow: hidden !important;
+        margin-bottom: 8px !important;
+        background-color: #f9f9f9 !important;
+        line-height: 0 !important;
+    }
+    .custom-card-img-wrap img {
+        width: 100% !important;
+        height: auto !important;
+        aspect-ratio: 1 / 1 !important;
+        object-fit: cover !important;
+        display: block !important;
+        border: none !important;
+    }
+    .custom-card-name-pill {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        font-size: 13px !important;
+        font-weight: bold !important;
+        padding: 6px 10px !important;
+        border-radius: 9999px !important;
+        line-height: 1.3 !important;
+        width: 100% !important;
+        min-height: 38px !important;
+        box-sizing: border-box !important;
+        text-align: center !important;
+        word-break: break-word !important;
+    }
+    @media (max-width: 600px) {
+        .custom-cards-section {
+            padding: 22px 0 25px !important;
+        }
+        .custom-cards-grid {
+            justify-content: flex-start !important;
+            flex-wrap: nowrap !important;
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            scroll-snap-type: x mandatory !important;
+            padding: 6px 12px 14px 12px !important;
+            scrollbar-width: none !important;
+            -ms-overflow-style: none !important;
+        }
+        .custom-cards-grid::-webkit-scrollbar {
+            display: none !important;
+        }
+        .custom-card-item {
+            flex: 0 0 130px !important;
+            max-width: 130px !important;
+            min-width: 130px !important;
+            margin: 0 5px !important;
+            padding: 8px !important;
+            border-radius: 10px !important;
+            scroll-snap-align: start !important;
+        }
+        .custom-card-img-wrap {
+            margin-bottom: 7px !important;
+            border-radius: 8px !important;
+        }
+        .custom-card-name-pill {
+            font-size: 12px !important;
+            padding: 5px 6px !important;
+            min-height: 34px !important;
+            line-height: 1.3 !important;
+            border-radius: 9999px !important;
+        }
+    }
+  </style>
+`;
+            
+            let css = rawBaseCSS.replace(/\[\[COL_BTN_TXT\]\]/g, gBtnTxt)
+                             .replace(/\[\[COL_BTN_BORDER\]\]/g, gBtnBd)
+                             .replace(/\[\[COL_BTN_BG\]\]/g, gBtnBg);
+                             
+            let fontSetting = '"Noto Sans JP Rounded", "jf-openhuninn-2.0", "jf-openhuninn", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+                             
+            let outputStr = '<div style="max-width: 750px; margin: 0 auto; text-align: center; color: #666666; font-family: ' + fontSetting + '; line-height: 1.6; padding: 10px; box-sizing: border-box;">\n' + css + '\n' + finalHtml + '</div>';
+            
+            const cleanHTML = outputStr.trim();
+            const outputArea = document.getElementById('outputCode');
+            if (outputArea) outputArea.value = cleanHTML;
+            const preview = document.getElementById('previewContainer');
+            if (preview) preview.innerHTML = cleanHTML;
+        }
+
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        const tabContents = document.querySelectorAll('.tab-content');
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                tabBtns.forEach(b => b.classList.remove('active'));
+                tabContents.forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                const target = document.getElementById(btn.getAttribute('data-target'));
+                if (target) target.classList.add('active');
+            });
+        });
+
+        document.getElementById('clearAllBtn').addEventListener('click', () => {
+            if(confirm("確定要清除所有填寫的資料嗎？(清除後無法復原)")) {
+                document.querySelectorAll('input[type="text"], textarea.spec-input').forEach(el => { el.value = ""; });
+                updateColors();
+                generateCode();
+            }
+        });
+
+        document.getElementById('copyBtn').addEventListener('click', () => {
+            const output = document.getElementById('outputCode');
+            output.select();
+            output.setSelectionRange(0, 999999);
+            
+            navigator.clipboard.writeText(output.value).then(() => {
+                showToast();
+            }).catch(() => {
+                document.execCommand('copy');
+                showToast();
+            });
+        });
+
+        function showToast() {
+            const toast = document.getElementById("toast");
+            if (!toast) return;
+            toast.className = "show";
+            setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000);
+        }
+
+        function updateColors() {
+            document.querySelectorAll('.section-details').forEach(sec => {
+                const inputs = sec.querySelectorAll('input[type="text"], textarea.spec-input');
+                let hasValue = false;
+                inputs.forEach(input => {
+                    if(input.value.trim() !== "") {
+                        input.classList.add('filled');
+                        hasValue = true;
+                    } else {
+                        input.classList.remove('filled');
+                    }
+                });
+                
+                const summary = sec.querySelector('.section-summary');
+                if (summary) {
+                    if (hasValue) {
+                        summary.style.backgroundColor = 'var(--header-bg)';
+                    } else {
+                        summary.style.backgroundColor = '#f3f4f6';
+                    }
+                }
+            });
+        }
+
+        // === 拖曳排序機制 ===
+        const container = document.getElementById('dataForm');
+        let draggedItem = null;
+
+        // 當滑鼠點擊輸入框、按鈕、顏色選擇器時，暫時關閉 draggable 避免打字被當成拖曳
+        document.getElementById('form-container').addEventListener('mousedown', (e) => {
+            const isControl = e.target.closest('input, textarea, button, select, .summary-actions');
+            const details = e.target.closest('.section-details');
+            if (isControl) {
+                if (details) details.setAttribute('draggable', 'false');
+            } else {
+                if (details) details.setAttribute('draggable', 'true');
+            }
+        });
+
+        container.addEventListener('dragstart', (e) => {
+            const isControl = e.target.closest('input, textarea, button, select, .summary-actions');
+            if (isControl) {
+                e.preventDefault();
+                return;
+            }
+            const item = e.target.closest('.section-details');
+            if (!item) return;
+            draggedItem = item;
+            item.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', '');
+        });
+
+        // 徹底修復拖曳結尾防呆
+        container.addEventListener('dragend', () => {
+            document.querySelectorAll('.section-details').forEach(el => {
+                el.classList.remove('dragging', 'drag-over-top', 'drag-over-bottom');
+                el.setAttribute('draggable', 'true');
+            });
+            draggedItem = null;
+            setTimeout(() => {
+                updateColors();
+                generateCode(); 
+            }, 30);
+        });
+
+        container.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            if (!draggedItem) return;
+
+            const afterElement = getDragAfterElement(container, e.clientY);
+            document.querySelectorAll('.section-details').forEach(el => {
+                el.classList.remove('drag-over-top', 'drag-over-bottom');
+            });
+
+            if (afterElement == null) {
+                const lastChild = container.querySelector('.section-details:last-child');
+                if (lastChild && lastChild !== draggedItem) {
+                    lastChild.classList.add('drag-over-bottom');
+                }
+                container.appendChild(draggedItem);
+            } else {
+                afterElement.classList.add('drag-over-top');
+                container.insertBefore(draggedItem, afterElement);
+            }
+        });
+
+        function getDragAfterElement(container, y) {
+            const draggableElements = [...container.querySelectorAll('.section-details:not(.dragging)')];
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+
+        // 初始運行
+        updateColors();
+        generateCode();
+    </script>
+</body>
+</html>
